@@ -1,0 +1,19 @@
+# ===================== 数据路径配置 =====================
+data_dir: "./datas"          # 原始图片根目录
+label_dir: "./labels"        # labelme标注文件根目录
+model_save_dir: "./weights"  # 模型权重保存目录
+
+# ===================== 关键点定义（与labelme标记一致） =====================
+keypoint_classes:
+  calib_center: 0      # calib图：中央条纹中心点（唯一）
+  exp_first_order: 1   # exp图：一级条纹中心点
+  scale_0mm: 2         # exp图：刻度尺0mm位置
+  scale_10mm: 3        # exp图：刻度尺10mm位置
+
+# ===================== 图像与训练配置 =====================
+img_size: [640, 480]  # 模型输入图像尺寸（宽×高，根据你的照片调整）
+batch_size: 16         # 云端GPU训练用16，本地CPU测试可改2
+epochs: 50             # 训练轮数
+learning_rate: 1e-4    # 初始学习率
+weight_decay: 1e-5     # 权重衰减（防止过拟合）
+early_stop_patience: 10 # 早停耐心值（验证损失10轮不下降则停止）
