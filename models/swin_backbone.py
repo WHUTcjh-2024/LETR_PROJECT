@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import timm
-from typing import Tuple
 import config
 from config import logger
 

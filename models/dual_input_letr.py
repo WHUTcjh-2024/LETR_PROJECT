@@ -5,10 +5,12 @@ from typing import Tuple
 from models.swin_backbone import SwinBackbone
 import config
 from config import logger
-
-
+"""定义了一个端到端的深度学习网络结构，构建了一个基于Swin transformer的
+双流关键点检测模型
+"""
 class CrossAttentionFusion(nn.Module):
-    """交叉注意力融合模块：让exp特征关注calib特征的中央条纹区域"""
+    """交叉注意力融合模块：
+    exp作为Query，calib作为Key/Value，强制exp关注calib的关键区域"""
 
     def __init__(self, in_channels: int, out_channels: int):
         super().__init__()
