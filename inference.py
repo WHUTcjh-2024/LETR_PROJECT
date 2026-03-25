@@ -43,7 +43,7 @@ def predict_keypoints(
     :param device: 设备
     :return: (calib_center, exp_other_kp, calib_img_size, exp_img_size)
         - calib_center: calib中央条纹坐标 (x0, y0)，原始图像像素值
-        - exp_other_kp: exp的其他关键点 (3, 2)，原始图像像素值：[exp_first_order, scale_0mm, scale_10mm]
+        - exp_other_kp: exp的其他关键点 (4, 2)，原始图像像素值：[exp_blur_center, exp_first_order, scale_200mm, scale_240mm]
         - calib_img_size: calib原始图像尺寸 (w, h)
         - exp_img_size: exp原始图像尺寸 (w, h)
     """
@@ -52,7 +52,7 @@ def predict_keypoints(
     calib_img_size = None
     exp_img_size = None
 
-    # ===================== 预处理图像 =====================
+    # 预处理图像
     calib_tensor = None
     exp_tensor = None
 
@@ -64,7 +64,7 @@ def predict_keypoints(
         exp_tensor, exp_img_size = preprocess_single_image(exp_img, config.IMG_SIZE)
         exp_tensor = exp_tensor.to(device)
 
-    # ===================== 模型推理 =====================
+    # 模型推理
     with torch.no_grad():
         # 如果只有calib图：用dummy exp图，只取calib的中央点
         if calib_tensor is not None and exp_tensor is None:
@@ -78,7 +78,7 @@ def predict_keypoints(
         elif exp_tensor is not None and calib_tensor is None:
             dummy_calib_tensor = torch.zeros_like(exp_tensor).to(device)
             pred_kp = model(dummy_calib_tensor, exp_tensor)
-            # 取后三个关键点（exp_first_order, scale_0mm, scale_10mm），反归一化
+            # 取后4个关键点（exp_blur_center, exp_first_order, scale_200mm, scale_240mm），反归一化
             exp_other_kp_norm = pred_kp[0, 1:].cpu().numpy()
             exp_other_kp = exp_other_kp_norm * np.array(exp_img_size)
 
@@ -110,19 +110,21 @@ def predict_calib_center(model: DualInputLETR, calib_img_pil: Image.Image, devic
 
 
 def predict_exp_keypoints(model: DualInputLETR, exp_img_pil: Image.Image, device: torch.device) -> Tuple[
-    np.ndarray, np.ndarray, np.ndarray]:
+    np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     预测exp图的关键点（简化接口，供app.py调用）
     :param model: 加载好的模型
     :param exp_img_pil: exp的PIL图像
     :param device: 设备
-    :return: (exp_first_order, scale_0mm, scale_10mm)，原始图像像素值
+    :return: (exp_blur_center, exp_first_order, scale_200mm, scale_240mm)，原始图像像素值
     """
     exp_img = cv2.cvtColor(np.array(exp_img_pil), cv2.COLOR_RGB2BGR)
     _, exp_other_kp, _, _ = predict_keypoints(model, None, exp_img, device)
     if exp_other_kp is None:
         raise ValueError("预测exp关键点失败！")
-    exp_first_order = exp_other_kp[0]
-    scale_0mm = exp_other_kp[1]
-    scale_10mm = exp_other_kp[2]
-    return exp_first_order, scale_0mm, scale_10mm
+    # 现在exp_other_kp是[exp_blur_center, exp_first_order, scale_200mm, scale_240mm]
+    exp_blur_center = exp_other_kp[0]
+    exp_first_order = exp_other_kp[1]
+    scale_200mm = exp_other_kp[2]
+    scale_240mm = exp_other_kp[3]
+    return exp_blur_center, exp_first_order, scale_200mm, scale_240mm

@@ -1,10 +1,8 @@
-import os
 import streamlit as st
 import pandas as pd
 from PIL import Image
 import torch
 import config
-from config import logger
 from inference import load_model, predict_calib_center, predict_exp_keypoints
 from utils.delta_x_calculator import calculate_delta_x
 from utils.gray_visualizer import plot_gray_profile
@@ -136,14 +134,13 @@ else:
             use_container_width=True
         )
 
-        # 计算按钮
         if st.button("计算条纹间距并显示灰度图", key="exp_button"):
             with st.spinner("🤖 AI正在处理实验数据..."):
                 try:
                     model, device = get_inference_model()
 
-                    # 预测exp图的关键点
-                    exp_first_order, scale_0mm, scale_10mm = predict_exp_keypoints(
+                    # 预测exp图的关键点（现在会返回exp_blur_center）
+                    exp_blur_center, exp_first_order, scale_200mm, scale_240mm = predict_exp_keypoints(
                         model,
                         exp_img,
                         device
@@ -153,17 +150,18 @@ else:
                     delta_x, pixel_per_mm = calculate_delta_x(
                         st.session_state.calib_center,
                         exp_first_order,
-                        scale_0mm,
-                        scale_10mm
+                        scale_200mm,
+                        scale_240mm
                     )
 
-                    # 绘制灰度图
+                    # 绘制灰度图（传入exp_blur_center）
                     gray_fig = plot_gray_profile(
                         exp_img,
                         st.session_state.calib_center,
+                        exp_blur_center,  # 新增：传入模糊中央点
                         exp_first_order,
-                        scale_0mm,
-                        scale_10mm
+                        scale_200mm,
+                        scale_240mm
                     )
 
                     # ===================== 显示结果 =====================
@@ -225,6 +223,6 @@ else:
         # 清空历史按钮
         if st.button("🗑️ 清空实验历史"):
             st.session_state.experiment_history = []
-            st.experimental_rerun()
+            st.rerun()
     else:
         st.info("暂无实验记录，请上传实验图开始实验。")

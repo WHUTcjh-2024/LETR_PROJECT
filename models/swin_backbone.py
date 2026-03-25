@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
-import timm
-import config
+import timm #PyTorch Image Models
 from config import logger
-
-
+"""基于Swin Transformer的特征提取类，对timm中的预训练模型轻量化封装"""
+"""选择 Swin-Tiny 而不是 ResNet 或 ViT：
+轻量（参数少）、层次化特征（多尺度）、窗口注意力（适合条纹的局部周期性）"""
 class SwinBackbone(nn.Module):
     def __init__(self, pretrained: bool = True, model_name: str = "swin_tiny_patch4_window7_224"):
         """
@@ -14,8 +14,7 @@ class SwinBackbone(nn.Module):
         """
         super().__init__()
         self.model_name = model_name
-
-        # 加载预训练的Swin模型（去掉分类头）
+        # 加载预训练的Swin模型
         self.swin = timm.create_model(
             model_name,
             pretrained=pretrained,
@@ -33,30 +32,24 @@ class SwinBackbone(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        前向传播
+        前向传播：兼容任意32倍数的输入尺寸
         :param x: 输入图像Tensor (B, 3, H, W)
         :return: 输出特征图Tensor (B, C, H/32, W/32)
         """
-        # Swin的前向传播：(B, 3, H, W) -> (B, N, C)，其中N = (H/32)*(W/32)
-        x = self.swin.patch_embed(x)  # (B, N, C)
-        x = self.swin.pos_drop(x)
+        # 先记录原始输入的H和W
+        _, _, orig_h, orig_w = x.shape
 
+        # Swin的前向传播
+        x = self.swin.patch_embed(x)
+        x = self.swin.pos_drop(x)
         for layer in self.swin.layers:
             x = layer(x)
+        x = self.swin.norm(x)
 
-        x = self.swin.norm(x)  # (B, N, C)
-
-        # 转换为 (B, C, H/32, W/32) 格式
+        # 转换维度：用原始输入尺寸计算特征图大小
         B, N, C = x.shape
-        H_feat = x.shape[1] // (x.shape[2] // self.out_channels)  # 简化计算，实际可根据输入尺寸推导
-        # 更准确的方式：根据输入图像尺寸计算特征图尺寸
-        input_h, input_w = x.shape[1] // (x.shape[2] // self.out_channels), x.shape[1] // (
-                    x.shape[2] // self.out_channels)
-        # 这里为了简单，假设输入图像尺寸是32的倍数
-        input_h, input_w = config.IMG_SIZE[1], config.IMG_SIZE[0]
-        H_feat = input_h // self.downsample_ratio
-        W_feat = input_w // self.downsample_ratio
-
+        H_feat = orig_h // self.downsample_ratio
+        W_feat = orig_w // self.downsample_ratio
         x = x.permute(0, 2, 1).reshape(B, C, H_feat, W_feat)
 
         return x

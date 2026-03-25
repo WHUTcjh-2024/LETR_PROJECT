@@ -109,7 +109,7 @@ class DualInputDataset(Dataset):
         calib_kp_list = calib_kp.reshape(-1, 2).tolist()
         exp_kp_list = exp_kp.reshape(-1, 2).tolist()
 
-        # 应用同步变换
+        # 应用变换
         transformed = self.transform(
             image=calib_img,
             calib_kp=calib_kp_list,
@@ -117,23 +117,24 @@ class DualInputDataset(Dataset):
             exp_kp=exp_kp_list
         )
 
-        # ===================== 整理数据 =====================
         # 转换为Tensor
         calib_img_tensor = transformed["image"]
         exp_img_tensor = transformed["exp_img"]
         calib_kp_tensor = torch.tensor(transformed["calib_kp"], dtype=torch.float32).reshape(config.NUM_KEYPOINTS, 2)
         exp_kp_tensor = torch.tensor(transformed["exp_kp"], dtype=torch.float32).reshape(config.NUM_KEYPOINTS, 2)
 
-        # 构建目标关键点：calib的中央点 + exp的其他点
+        # ===================== 构建目标关键点（适配5个点） =====================
+        # target_kp: [calib_center, exp_blur_center, exp_first_order, scale_200mm, scale_240mm]
         target_kp_tensor = torch.cat([
-            calib_kp_tensor[:1, :],  # calib_center
-            exp_kp_tensor[1:, :]  # exp_first_order, scale_0mm, scale_10mm
+            calib_kp_tensor[:1, :],  # calib_center（来自calib图）
+            exp_kp_tensor[1:, :]  # exp的其他4个点（来自exp图）
         ], dim=0)
+        # ========================================================================
 
         return {
-            "calib_img": calib_img_tensor,  # (3, H, W)
-            "exp_img": exp_img_tensor,  # (3, H, W)
-            "target_kp": target_kp_tensor  # (4, 2)
+            "calib_img": calib_img_tensor,
+            "exp_img": exp_img_tensor,
+            "target_kp": target_kp_tensor
         }
 
 

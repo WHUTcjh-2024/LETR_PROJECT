@@ -1,19 +1,28 @@
 # ===================== 数据路径配置 =====================
-data_dir: "./datas"          # 原始图片根目录
-label_dir: "./labels"        # labelme标注文件根目录
-model_save_dir: "./weights"  # 模型权重保存目录
+data_dir: "./datas"
+label_dir: "./labels"
+model_save_dir: "./weights"
 
-# ===================== 关键点定义（与labelme标记一致） =====================
+# ===================== 关键点定义（从4个变成5个） =====================
 keypoint_classes:
-  calib_center: 0      # calib图：中央条纹中心点（唯一）
-  exp_first_order: 1   # exp图：一级条纹中心点
-  scale_0mm: 2         # exp图：刻度尺0mm位置
-  scale_10mm: 3        # exp图：刻度尺10mm位置
+  calib_center: 0      # calib图：清晰中央条纹中心点
+  exp_blur_center: 1   # exp图：模糊中央条纹中心点（新增）
+  exp_first_order: 2   # exp图：一级条纹中心点
+  scale_200mm: 3       # exp图：200mm刻度
+  scale_240mm: 4       # exp图：240mm刻度
+
+# ===================== 核心物理先验配置 =====================
+# 200mm到240mm的实际间距：40mm
+scale_real_distance: 40.0
+# calib_center到exp_blur_center的固定物理偏移：20mm（2cm）
+# 注意：如果是“上方”，y轴坐标更小，偏移量为负；如果是“下方”，偏移量为正
+# 请根据你的实际实验调整正负号
+fixed_physical_offset: -20.0  # 单位：mm，负号表示calib在exp上方2cm
 
 # ===================== 图像与训练配置 =====================
-img_size: [640, 480]  # 模型输入图像尺寸（宽×高，根据你的照片调整）
-batch_size: 16         # 云端GPU训练用16，本地CPU测试可改2
-epochs: 50             # 训练轮数
-learning_rate: 1e-4    # 初始学习率
-weight_decay: 1e-5     # 权重衰减（防止过拟合）
-early_stop_patience: 10 # 早停耐心值（验证损失10轮不下降则停止）
+img_size: [640, 480]
+batch_size: 16
+epochs: 50
+learning_rate: 1e-4
+weight_decay: 1e-5
+early_stop_patience: 10

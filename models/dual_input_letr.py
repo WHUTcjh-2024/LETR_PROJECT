@@ -6,11 +6,13 @@ from models.swin_backbone import SwinBackbone
 import config
 from config import logger
 """定义了一个端到端的深度学习网络结构，构建了一个基于Swin transformer的
-双流关键点检测模型
-"""
+双流关键点检测模型，分别用两个相同的特征提取器（Backbone)提取两张图片的特
+征，然后通过交叉注意力机制（Cross-Attention)让两组特征融合"""
+"""双输入LETR模型的完整实现"""
 class CrossAttentionFusion(nn.Module):
     """交叉注意力融合模块：
-    exp作为Query，calib作为Key/Value，强制exp关注calib的关键区域"""
+    exp作为Query，calib作为Key/Value，强制exp关注calib的关键区域
+    解决中央条纹在 exp 图中模糊的问题"""
 
     def __init__(self, in_channels: int, out_channels: int):
         super().__init__()
@@ -41,7 +43,7 @@ class CrossAttentionFusion(nn.Module):
         fused_feat = fused_feat.permute(0, 2, 1).reshape(B, C, H, W)  # (B, C, H, W)
 
         # 残差连接和归一化
-        fused_feat = self.out_conv(fused_feat) + exp_feat
+        fused_feat = self.out_conv(fused_feat) + exp_feat#防止信息丢失（ResNet思想）
         fused_feat = self.norm(fused_feat.flatten(2).permute(0, 2, 1)).permute(0, 2, 1).reshape(B, C, H, W)
 
         return fused_feat
@@ -74,7 +76,7 @@ class KeypointHead(nn.Module):
             nn.ReLU(),
             nn.Dropout(0.5),
             nn.Linear(128, num_keypoints * 2),
-            nn.Sigmoid()  # 归一化到0-1
+            nn.Sigmoid()  # 归一化到0-1，归一化坐标
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -90,7 +92,7 @@ class KeypointHead(nn.Module):
 
 
 class DualInputLETR(nn.Module):
-    """双输入LETR关键点检测模型：结合calib和exp图预测关键点"""
+    """双输入LETR关键点检测模型：两个独立的Swin transformer backbone,结合calib和exp图预测关键点"""
 
     def __init__(self, num_keypoints: int = config.NUM_KEYPOINTS, pretrained_backbone: bool = True):
         super().__init__()
@@ -134,14 +136,12 @@ class DualInputLETR(nn.Module):
 
 
 class CombinedLoss(nn.Module):
-    """组合损失函数：关键点回归损失 + 一致性损失"""
+    """组合损失函数：关键点回归损失 + 特征一致性损失 + 物理偏移先验损失"""
 
-    def __init__(self, lambda_consistency: float = 0.5):
-        """
-        :param lambda_consistency: 一致性损失的权重
-        """
+    def __init__(self, lambda_consistency: float = 0.5, lambda_offset: float = 1.0):
         super().__init__()
         self.lambda_consistency = lambda_consistency
+        self.lambda_offset = lambda_offset
         self.smooth_l1 = nn.SmoothL1Loss()
 
     def forward(
@@ -152,23 +152,17 @@ class CombinedLoss(nn.Module):
             exp_backbone: nn.Module,
             calib_img: torch.Tensor,
             exp_img: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
-        :param pred_kp: 预测的关键点 (B, 4, 2)
-        :param target_kp: 目标关键点 (B, 4, 2)
-        :param calib_backbone: calib的backbone（用于一致性损失）
-        :param exp_backbone: exp的backbone（用于一致性损失）
-        :param calib_img: calib图像 (B, 3, H, W)
-        :param exp_img: exp图像 (B, 3, H, W)
-        :return: (total_loss, kp_loss, consistency_loss)
+        :param pred_kp: 预测的关键点 (B, 5, 2)
+        :param target_kp: 目标关键点 (B, 5, 2)
+        :return: (total_loss, kp_loss, consistency_loss, offset_loss)
         """
-        # ===================== 关键点回归损失 =====================
-        # 只计算有标注的点（target_kp != -1）
-        mask = (target_kp != -1.0).all(dim=-1, keepdim=True).float()  # (B, 4, 1)
+        # ===================== 1. 关键点回归损失 =====================
+        mask = (target_kp != -1.0).all(dim=-1, keepdim=True).float()
         kp_loss = self.smooth_l1(pred_kp * mask, target_kp * mask)
 
-        # ===================== 一致性损失：强制calib和exp的中央点特征相似 =====================
-        # 提取calib和exp的中央点特征（简化版：用backbone输出的全局平均特征）
+        # ===================== 2. 特征一致性损失 =====================
         with torch.no_grad():
             calib_feat = calib_backbone(calib_img)
             exp_feat = exp_backbone(exp_img)
@@ -176,7 +170,32 @@ class CombinedLoss(nn.Module):
         exp_feat_global = F.adaptive_avg_pool2d(exp_feat, (1, 1)).flatten(1)
         consistency_loss = F.mse_loss(calib_feat_global, exp_feat_global)
 
-        # ===================== 总损失 =====================
-        total_loss = kp_loss + self.lambda_consistency * consistency_loss
+        # ===================== 3. 新增：物理偏移先验损失（核心！） =====================
+        offset_loss = torch.tensor(0.0, device=pred_kp.device)
+        # 只计算有标注的样本
+        valid_mask = (target_kp[:, 0] != -1.0).all(dim=-1) & (target_kp[:, 1] != -1.0).all(dim=-1)
+        if valid_mask.sum() > 0:
+            # 提取预测的calib_center和exp_blur_center
+            pred_calib = pred_kp[valid_mask, 0]  # (B_valid, 2)
+            pred_exp_blur = pred_kp[valid_mask, 1]  # (B_valid, 2)
 
-        return total_loss, kp_loss, consistency_loss
+            # 计算像素偏移（假设是垂直方向，y轴）
+            pixel_offset_pred = pred_exp_blur[:, 1] - pred_calib[:, 1]  # (B_valid,)
+
+            # 从target中提取刻度，计算像素-毫米比例（简化：用第一个样本的刻度）
+            scale_200 = target_kp[valid_mask, 3]  # (B_valid, 2)
+            scale_240 = target_kp[valid_mask, 4]  # (B_valid, 2)
+            scale_pixel_dist = torch.norm(scale_240 - scale_200, dim=-1)  # (B_valid,)
+            pixel_per_mm = scale_pixel_dist / config.SCALE_REAL_DISTANCE  # (B_valid,)
+
+            # 计算预测的物理偏移（mm）
+            physical_offset_pred = pixel_offset_pred / pixel_per_mm  # (B_valid,)
+
+            # 计算与固定物理偏移的损失
+            target_offset = torch.tensor(config.FIXED_PHYSICAL_OFFSET, device=pred_kp.device, dtype=torch.float32)
+            offset_loss = F.mse_loss(physical_offset_pred, target_offset.expand_as(physical_offset_pred))
+
+        # ===================== 4. 总损失 =====================
+        total_loss = kp_loss + self.lambda_consistency * consistency_loss + self.lambda_offset * offset_loss
+
+        return total_loss, kp_loss, consistency_loss, offset_loss
