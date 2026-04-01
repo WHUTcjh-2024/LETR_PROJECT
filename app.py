@@ -7,7 +7,6 @@ from inference import load_model, predict_calib_center, predict_exp_keypoints
 from utils.delta_x_calculator import calculate_delta_x
 from utils.gray_visualizer import plot_gray_profile
 
-# ===================== 页面配置 =====================
 st.set_page_config(
     page_title="AI+毛细波衍射实验系统",
     page_icon="🔬",

@@ -9,6 +9,7 @@ def calculate_delta_x(
         apply_offset_correction: bool = True
 ) -> Tuple[float, float]:
     real_distance = config.SCALE_REAL_DISTANCE
+
     # 计算像素-毫米比例
     scale_pixel_dist = np.linalg.norm(scale_end - scale_start)
     pixel_per_mm = scale_pixel_dist / real_distance

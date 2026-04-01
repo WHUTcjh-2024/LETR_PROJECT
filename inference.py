@@ -9,14 +9,7 @@ from config import logger
 from models.dual_input_letr import DualInputLETR
 from utils.transforms import preprocess_single_image
 
-
 def load_model(model_path: str, device: torch.device) -> DualInputLETR:
-    """
-    加载训练好的模型
-    :param model_path: 模型权重路径
-    :param device: 设备（CPU或GPU）
-    :return: 加载好的模型
-    """
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"模型权重文件 {model_path} 不存在！")
 
@@ -27,7 +20,6 @@ def load_model(model_path: str, device: torch.device) -> DualInputLETR:
     model.eval()
     logger.info("模型加载成功")
     return model
-
 
 def predict_keypoints(
         model: DualInputLETR,
@@ -95,7 +87,7 @@ def predict_keypoints(
 
 def predict_calib_center(model: DualInputLETR, calib_img_pil: Image.Image, device: torch.device) -> np.ndarray:
     """
-    预测calib图的中央条纹坐标（简化接口，供app.py调用）
+    预测calib图的中央条纹坐标
     :param model: 加载好的模型
     :param calib_img_pil: calib的PIL图像
     :param device: 设备
@@ -112,7 +104,7 @@ def predict_calib_center(model: DualInputLETR, calib_img_pil: Image.Image, devic
 def predict_exp_keypoints(model: DualInputLETR, exp_img_pil: Image.Image, device: torch.device) -> Tuple[
     np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    预测exp图的关键点（简化接口，供app.py调用）
+    预测exp图的关键点
     :param model: 加载好的模型
     :param exp_img_pil: exp的PIL图像
     :param device: 设备

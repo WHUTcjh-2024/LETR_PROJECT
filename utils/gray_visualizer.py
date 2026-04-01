@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 from PIL import Image
 from typing import Tuple, Optional
 
-
 def plot_gray_profile(
         img_pil: Image.Image,
         calib_center: Optional[np.ndarray] = None,
