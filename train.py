@@ -13,6 +13,9 @@ from utils.data_loader import get_dataloader
 学习率调度：factor = 0.5,学不会就慢点学
 早停：防止过拟合，再学不会就不学了
 """
+"""损失函数：CombinedLoss
+   优化器：AdamW
+   经典的pytorch写法"""
 def train():
     #初始化模型、损失函数、优化器
     model = DualInputLETR(pretrained_backbone=True).to(config.DEVICE)

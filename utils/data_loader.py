@@ -7,25 +7,19 @@ import config
 from config import logger
 from utils.labelme_parser import parse_labelme
 from utils.transforms import get_train_transforms, get_val_transforms
-
+"""数据预处理与加载模块：
+通过PyTorch的Dataset类，将图片和JSON文件转化为张量"""
 
 class DualInputDataset(Dataset):
     def __init__(self, mode: str = "train"):
-        """
-        双输入数据集：成对加载calib图（无激励）和exp图（有激励）
-        通过文件名前缀匹配：calib_001.jpg 对应 exp_001_*.jpg
-        :param mode: "train" 或 "val"
-        """
         self.mode = mode
         self.img_size = config.IMG_SIZE
-
-        # ===================== 路径设置 =====================
+        """高频函数"""
         self.calib_img_dir = os.path.join(config.DATA_DIR, mode, "calib")
         self.exp_img_dir = os.path.join(config.DATA_DIR, mode, "exp")
         self.calib_label_dir = os.path.join(config.LABEL_DIR, mode, "calib")
         self.exp_label_dir = os.path.join(config.LABEL_DIR, mode, "exp")
 
-        # ===================== 检查路径是否存在 =====================
         for dir_path in [self.calib_img_dir, self.exp_img_dir, self.calib_label_dir, self.exp_label_dir]:
             if not os.path.exists(dir_path):
                 raise FileNotFoundError(f"目录 {dir_path} 不存在！")
@@ -80,21 +74,18 @@ class DualInputDataset(Dataset):
         return len(self.samples)
 
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
-        # ===================== 获取文件路径 =====================
         calib_file, exp_file = self.samples[idx]
         calib_img_path = os.path.join(self.calib_img_dir, calib_file)
         exp_img_path = os.path.join(self.exp_img_dir, exp_file)
         calib_label_path = os.path.join(self.calib_label_dir, os.path.splitext(calib_file)[0] + ".json")
         exp_label_path = os.path.join(self.exp_label_dir, os.path.splitext(exp_file)[0] + ".json")
 
-        # ===================== 读取图像 =====================
-        # 读取calib图（BGR -> RGB）
+       # PyTorch use RGB not BGR to read photos
         calib_img = cv2.imread(calib_img_path)
         if calib_img is None:
             raise ValueError(f"无法读取calib图像：{calib_img_path}")
         calib_img = cv2.cvtColor(calib_img, cv2.COLOR_BGR2RGB)
 
-        # 读取exp图（BGR -> RGB）
         exp_img = cv2.imread(exp_img_path)
         if exp_img is None:
             raise ValueError(f"无法读取exp图像：{exp_img_path}")
